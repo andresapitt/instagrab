@@ -19,7 +19,9 @@ import {
   AlertCircle,
   HelpCircle,
   FolderArchive,
-  Smartphone
+  Smartphone,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import JSZip from 'jszip';
@@ -41,6 +43,17 @@ export default function Home() {
   // Clipboard toast
   const [clipboardUrl, setClipboardUrl] = useState('');
   const [showClipboardToast, setShowClipboardToast] = useState(false);
+
+  // Download progress feedback state
+  const [downloadProgress, setDownloadProgress] = useState({
+    active: false,
+    percent: 0,
+    loadedMB: '0.0',
+    totalMB: '0.0',
+    status: 'idle', // 'idle' | 'downloading' | 'packaging' | 'completed' | 'error'
+    text: '',
+    error: null
+  });
 
   // Settings & History modals
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -234,23 +247,175 @@ export default function Home() {
     }
   };
 
-  // Download All as ZIP for Carousels
+  // Download Single Media with Real-Time Progress Bar
+  const downloadWithProgress = async (mediaUrl, filename, label = 'media') => {
+    if (!mediaUrl || downloadProgress.active) return;
+
+    setDownloadProgress({
+      active: true,
+      percent: 0,
+      loadedMB: '0.0',
+      totalMB: '...',
+      status: 'downloading',
+      text: `Preparing ${label}...`,
+      error: null
+    });
+
+    try {
+      const proxyUrl = `/api/download?url=${encodeURIComponent(mediaUrl)}&filename=${encodeURIComponent(filename)}`;
+      const res = await fetch(proxyUrl);
+      if (!res.ok) {
+        throw new Error(`Download failed with status ${res.status}`);
+      }
+
+      const contentLengthHeader = res.headers.get('content-length');
+      const totalBytes = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
+      const totalMB = totalBytes ? (totalBytes / (1024 * 1024)).toFixed(1) : null;
+
+      const reader = res.body?.getReader();
+      const chunks = [];
+      let receivedBytes = 0;
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          chunks.push(value);
+          receivedBytes += value.length;
+
+          const loadedMB = (receivedBytes / (1024 * 1024)).toFixed(1);
+          let percent = 0;
+          if (totalBytes > 0) {
+            percent = Math.min(100, Math.round((receivedBytes / totalBytes) * 100));
+          }
+
+          setDownloadProgress({
+            active: true,
+            percent,
+            loadedMB,
+            totalMB: totalMB || '?',
+            status: 'downloading',
+            text: totalBytes > 0
+              ? `Downloading ${label}... ${percent}% (${loadedMB} / ${totalMB} MB)`
+              : `Downloading ${label}... (${loadedMB} MB)`,
+            error: null
+          });
+        }
+      } else {
+        const blob = await res.blob();
+        chunks.push(blob);
+      }
+
+      // Concatenate chunks into a single Blob
+      const contentType = res.headers.get('content-type') || (filename.endsWith('.jpg') ? 'image/jpeg' : 'video/mp4');
+      const finalBlob = chunks[0] instanceof Blob ? chunks[0] : new Blob(chunks, { type: contentType });
+
+      // Trigger automatic save to device
+      const blobUrl = URL.createObjectURL(finalBlob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = blobUrl;
+      downloadLink.download = filename;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+
+      // Complete feedback
+      const finalSizeMB = (finalBlob.size / (1024 * 1024)).toFixed(1);
+      setDownloadProgress({
+        active: true,
+        percent: 100,
+        loadedMB: finalSizeMB,
+        totalMB: finalSizeMB,
+        status: 'completed',
+        text: `Saved ${filename} to your device! 🎉`,
+        error: null
+      });
+
+      confetti({ particleCount: 40, spread: 55, origin: { y: 0.7 } });
+
+      // Auto-hide progress bar after 3.5s
+      setTimeout(() => {
+        setDownloadProgress((prev) => (prev.status === 'completed' ? { ...prev, active: false } : prev));
+      }, 3500);
+    } catch (err) {
+      console.error('Download error:', err);
+      setDownloadProgress({
+        active: true,
+        percent: 0,
+        loadedMB: '0.0',
+        totalMB: '0.0',
+        status: 'error',
+        text: 'Download failed',
+        error: err.message || 'Network error during download.'
+      });
+      setTimeout(() => {
+        setDownloadProgress((prev) => ({ ...prev, active: false }));
+      }, 4000);
+    }
+  };
+
+  // Download All as ZIP for Carousels with live multi-file progress
   const handleDownloadAllZip = async () => {
-    if (!result?.media || result.media.length === 0) return;
+    if (!result?.media || result.media.length === 0 || downloadProgress.active) return;
     setDownloadingZip(true);
+    setDownloadProgress({
+      active: true,
+      percent: 0,
+      loadedMB: '0',
+      totalMB: `${result.media.length}`,
+      status: 'downloading',
+      text: `Starting album download (0 of ${result.media.length})...`,
+      error: null
+    });
+
     try {
       const zip = new JSZip();
       const folder = zip.folder(`instagrab_${result.shortcode}`);
+      const totalItems = result.media.length;
 
-      for (let i = 0; i < result.media.length; i++) {
+      for (let i = 0; i < totalItems; i++) {
         const item = result.media[i];
+        setDownloadProgress({
+          active: true,
+          percent: Math.round((i / totalItems) * 85),
+          loadedMB: `${i + 1}`,
+          totalMB: `${totalItems}`,
+          status: 'downloading',
+          text: `Fetching item ${i + 1} of ${totalItems} (${item.type})...`,
+          error: null
+        });
+
         const proxyUrl = `/api/download?url=${encodeURIComponent(item.url)}&filename=${encodeURIComponent(item.filename)}`;
         const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error(`Failed to fetch item ${i + 1}`);
         const blob = await res.blob();
         folder.file(item.filename, blob);
       }
 
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      setDownloadProgress({
+        active: true,
+        percent: 88,
+        loadedMB: `${totalItems}`,
+        totalMB: `${totalItems}`,
+        status: 'packaging',
+        text: 'Packaging ZIP album archive...',
+        error: null
+      });
+
+      const zipBlob = await zip.generateAsync(
+        { type: 'blob' },
+        (metadata) => {
+          setDownloadProgress((prev) => ({
+            ...prev,
+            percent: 88 + Math.round((metadata.percent / 100) * 11),
+            text: `Packaging ZIP archive: ${Math.round(metadata.percent)}%`
+          }));
+        }
+      );
+
       const downloadLink = document.createElement('a');
       downloadLink.href = URL.createObjectURL(zipBlob);
       downloadLink.download = `instagrab_${result.shortcode}_album.zip`;
@@ -258,9 +423,35 @@ export default function Home() {
       downloadLink.click();
       document.body.removeChild(downloadLink);
 
-      confetti({ particleCount: 40, spread: 50 });
+      const zipSizeMB = (zipBlob.size / (1024 * 1024)).toFixed(1);
+      setDownloadProgress({
+        active: true,
+        percent: 100,
+        loadedMB: zipSizeMB,
+        totalMB: zipSizeMB,
+        status: 'completed',
+        text: `Album ZIP saved (${zipSizeMB} MB)! 🎉`,
+        error: null
+      });
+
+      confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+
+      setTimeout(() => {
+        setDownloadProgress((prev) => (prev.status === 'completed' ? { ...prev, active: false } : prev));
+      }, 4000);
     } catch (err) {
-      alert('Failed to package zip: ' + err.message);
+      setDownloadProgress({
+        active: true,
+        percent: 0,
+        loadedMB: '0.0',
+        totalMB: '0.0',
+        status: 'error',
+        text: 'Failed to package album ZIP',
+        error: err.message
+      });
+      setTimeout(() => {
+        setDownloadProgress((prev) => ({ ...prev, active: false }));
+      }, 4000);
     } finally {
       setDownloadingZip(false);
     }
@@ -582,32 +773,103 @@ export default function Home() {
             )}
 
             <div className="result-buttons">
-              {/* Primary Download Button via proxy for direct save */}
-              <a
-                href={`/api/download?url=${encodeURIComponent(currentMedia?.url)}&filename=${encodeURIComponent(currentMedia?.filename || 'instagram_media.mp4')}`}
-                download={currentMedia?.filename || 'instagram_media.mp4'}
+              {/* Real-Time Download Progress Feedback Card */}
+              {downloadProgress.active && (
+                <div className={`download-progress-card status-${downloadProgress.status}`}>
+                  <div className="progress-header">
+                    <div className="progress-info">
+                      {downloadProgress.status === 'downloading' || downloadProgress.status === 'packaging' ? (
+                        <Loader2 size={16} className="progress-spinner" />
+                      ) : downloadProgress.status === 'completed' ? (
+                        <CheckCircle2 size={16} className="progress-icon-success" />
+                      ) : (
+                        <AlertCircle size={16} className="progress-icon-error" />
+                      )}
+                      <span className="progress-title">{downloadProgress.text}</span>
+                    </div>
+                    {downloadProgress.percent > 0 && downloadProgress.status !== 'completed' && (
+                      <span className="progress-percentage-badge">{downloadProgress.percent}%</span>
+                    )}
+                  </div>
+
+                  {/* Animated Progress Track */}
+                  <div className="progress-track">
+                    <div
+                      className="progress-fill"
+                      style={{
+                        width: `${downloadProgress.percent}%`,
+                        transition: downloadProgress.percent === 0 ? 'none' : 'width 0.25s ease-out'
+                      }}
+                    >
+                      <div className="progress-shimmer" />
+                    </div>
+                  </div>
+
+                  <div className="progress-footer">
+                    <span>
+                      {downloadProgress.status === 'completed'
+                        ? 'Saved directly to device files'
+                        : downloadProgress.status === 'error'
+                        ? (downloadProgress.error || 'Download failed')
+                        : downloadProgress.status === 'packaging'
+                        ? 'Packaging ZIP archive...'
+                        : `${downloadProgress.loadedMB} of ${downloadProgress.totalMB} MB`}
+                    </span>
+                    {downloadProgress.status === 'downloading' && (
+                      <span className="progress-live-pulse">Streaming direct</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Primary Download Button with real-time stream feedback */}
+              <button
+                onClick={() =>
+                  downloadWithProgress(
+                    currentMedia?.url,
+                    currentMedia?.filename || `instagrab_${result.shortcode}_${currentMediaIndex + 1}.${currentMedia?.type === 'video' ? 'mp4' : 'jpg'}`,
+                    currentMedia?.type === 'video' ? 'Video' : 'Photo'
+                  )
+                }
+                disabled={downloadProgress.active}
                 className="btn-download-primary"
-                onClick={() => {
-                  confetti({ particleCount: 35, spread: 45 });
-                }}
+                title="Download directly to your device storage"
               >
-                <Download size={20} />
-                <span>
-                  Download {currentMedia?.type === 'video' ? 'Video' : 'Photo'} ({currentMediaIndex + 1} of {result.media?.length || 1})
-                </span>
-              </a>
+                {downloadProgress.active && downloadProgress.status === 'downloading' ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    <span>
+                      Downloading... {downloadProgress.percent > 0 ? `${downloadProgress.percent}%` : ''}
+                    </span>
+                  </>
+                ) : downloadProgress.active && downloadProgress.status === 'completed' ? (
+                  <>
+                    <CheckCircle2 size={20} color="#fff" />
+                    <span>Downloaded!</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={20} />
+                    <span>
+                      Download {currentMedia?.type === 'video' ? 'Video' : 'Photo'} ({currentMediaIndex + 1} of {result.media?.length || 1})
+                    </span>
+                  </>
+                )}
+              </button>
 
               {/* Download All as ZIP for Carousels */}
               {result.media?.length > 1 && (
                 <button
                   onClick={handleDownloadAllZip}
-                  disabled={downloadingZip}
+                  disabled={downloadProgress.active}
                   className="btn-action-secondary"
                   style={{ width: '100%' }}
                 >
                   <FolderArchive size={17} />
                   <span>
-                    {downloadingZip ? 'Packaging Album ZIP...' : `Download All ${result.media.length} Items (ZIP)`}
+                    {downloadProgress.active && downloadProgress.status === 'packaging'
+                      ? 'Packaging Album ZIP...'
+                      : `Download All ${result.media.length} Items (ZIP)`}
                   </span>
                 </button>
               )}
