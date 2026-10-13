@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'InstaGrab - Download Instagram Photos, Reels & Videos',
-  description: 'Fast, installable mobile PWA to save high-resolution photos, reels, and video carousels directly from Instagram share links.',
+  title: 'InstaGrab - Download Instagram & Facebook Photos, Reels & Videos',
+  description: 'Fast, installable mobile PWA to save high-resolution photos, reels, and videos directly from Instagram and Facebook share links.',
   applicationName: 'InstaGrab',
   appleWebApp: {
     capable: true,

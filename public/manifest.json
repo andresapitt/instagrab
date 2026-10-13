@@ -1,7 +1,7 @@
 {
-  "name": "InstaGrab - Download Instagram Photos & Videos",
+  "name": "InstaGrab - Download Instagram & Facebook Media",
   "short_name": "InstaGrab",
-  "description": "Download reels, photos, carousels, and videos directly from Instagram links.",
+  "description": "Download reels, photos, carousels, and videos directly from Instagram and Facebook links.",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",

@@ -548,6 +548,52 @@ html, body {
   border-radius: var(--radius-full);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.media-badge.platform-facebook {
+  background: rgba(24, 119, 242, 0.2);
+  border: 1px solid rgba(24, 119, 242, 0.45);
+  color: #70b4ff;
+}
+
+.media-badge.platform-instagram {
+  background: rgba(255, 46, 120, 0.2);
+  border: 1px solid rgba(255, 46, 120, 0.45);
+  color: #ffa1be;
+}
+
+.author-avatar.platform-facebook {
+  border-color: #1877f2;
+}
+
+.author-avatar.platform-instagram {
+  border-color: var(--brand-pink);
+}
+
+.platform-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  margin-right: 6px;
+}
+
+.platform-pill.facebook {
+  background: rgba(24, 119, 242, 0.18);
+  color: #60a5fa;
+  border: 1px solid rgba(24, 119, 242, 0.35);
+}
+
+.platform-pill.instagram {
+  background: rgba(255, 46, 120, 0.18);
+  color: #f472b6;
+  border: 1px solid rgba(255, 46, 120, 0.35);
 }
 
 /* Media Showcase Area */

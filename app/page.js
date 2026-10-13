@@ -93,7 +93,7 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search);
     const sharedText = params.get('text') || params.get('url') || params.get('title') || '';
     if (sharedText) {
-      const foundMatch = sharedText.match(/https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/[^\s]+/i);
+      const foundMatch = sharedText.match(/https?:\/\/(?:[a-zA-Z0-9-]+\.)?(?:instagram\.com|instagr\.am|facebook\.com|fb\.watch|fb\.me)\/[^\s]+/i);
       if (foundMatch) {
         const urlToFetch = foundMatch[0];
         setInputUrl(urlToFetch);
@@ -113,7 +113,8 @@ export default function Home() {
       if (!navigator.clipboard?.readText) return;
       try {
         const text = await navigator.clipboard.readText();
-        if (text && text.includes('instagram.com/') && text !== inputUrl && (!result || result.url !== text)) {
+        const isSocialLink = /(?:instagram\.com|instagr\.am|facebook\.com|fb\.watch|fb\.me)\//i.test(text);
+        if (text && isSocialLink && text !== inputUrl && (!result || result.url !== text)) {
           setClipboardUrl(text.trim());
           setShowClipboardToast(true);
         }
@@ -157,12 +158,13 @@ export default function Home() {
 
       // Save to History
       const newHistoryItem = {
-        id: json.data.shortcode,
-        shortcode: json.data.shortcode,
+        id: json.data.id || json.data.shortcode,
+        shortcode: json.data.shortcode || json.data.id,
+        platform: json.data.platform || (json.data.url?.includes('facebook') ? 'facebook' : 'instagram'),
         url: json.data.url,
         type: json.data.type,
         caption: json.data.caption?.slice(0, 100) || '',
-        author: json.data.author?.username || 'instagram_user',
+        author: json.data.author?.username || (json.data.platform === 'facebook' ? 'facebook_user' : 'instagram_user'),
         thumbnail: json.data.media?.[0]?.thumbnail || json.data.media?.[0]?.url || '',
         timestamp: Date.now()
       };
@@ -461,9 +463,10 @@ export default function Home() {
   const handleShareMedia = async (mediaItem) => {
     if (navigator.share) {
       try {
+        const platformName = result?.platform === 'facebook' ? 'Facebook' : 'Instagram';
         await navigator.share({
-          title: `InstaGrab - Instagram Media`,
-          text: result?.caption ? result.caption.slice(0, 100) : 'Instagram Post',
+          title: `InstaGrab - ${platformName} Media`,
+          text: result?.caption ? result.caption.slice(0, 100) : `${platformName} Post`,
           url: result?.url || window.location.href
         });
       } catch {}
@@ -550,14 +553,14 @@ export default function Home() {
       <section className="hero">
         <div className="hero-badge">
           <Sparkles size={13} />
-          <span>Mobile-Ready PWA & Web Share</span>
+          <span>Instagram & Facebook Downloader</span>
         </div>
         <h1 className="hero-title">
-          Download Instagram <br />
-          <span>Reels, Photos & Videos</span>
+          Download Instagram &amp; <br />
+          <span>Facebook Media</span>
         </h1>
         <p className="hero-subtitle">
-          Paste any post link or use Instagram&apos;s Share button to automatically grab media in original resolution.
+          Paste any Reel, Video, Photo, or Post link from Instagram or Facebook to automatically grab original high-resolution media.
         </p>
       </section>
 
@@ -571,7 +574,7 @@ export default function Home() {
             id="ig-url-input"
             type="text"
             className="input-field"
-            placeholder="Paste Instagram link (post, reel, carousel)..."
+            placeholder="Paste Instagram or Facebook link (reels, videos, photos)..."
             value={inputUrl}
             onChange={(e) => setInputUrl(e.target.value)}
             onKeyDown={(e) => {
@@ -623,7 +626,7 @@ export default function Home() {
         <div className="loading-box">
           <div className="spinner" />
           <h3 className="loading-text">Extracting High-Quality Media</h3>
-          <p className="loading-subtext">Connecting to Instagram servers & parsing media stream...</p>
+          <p className="loading-subtext">Connecting to servers & parsing original media stream...</p>
         </div>
       )}
 
@@ -652,34 +655,43 @@ export default function Home() {
                 <img
                   src={result.author.avatar}
                   alt={result.author.username}
-                  className="author-avatar"
+                  className={`author-avatar ${result.platform === 'facebook' ? 'platform-facebook' : 'platform-instagram'}`}
                 />
               ) : (
                 <div
-                  className="author-avatar"
+                  className={`author-avatar ${result.platform === 'facebook' ? 'platform-facebook' : 'platform-instagram'}`}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  <span style={{ fontSize: '12px', fontWeight: 'bold' }}>IG</span>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold' }}>
+                    {result.platform === 'facebook' ? 'FB' : 'IG'}
+                  </span>
                 </div>
               )}
               <div>
-                <div className="author-username">@{result.author?.username || 'instagram_user'}</div>
+                <div className="author-username">
+                  {result.platform === 'facebook' ? (
+                    <span className="platform-pill facebook">Facebook</span>
+                  ) : (
+                    <span className="platform-pill instagram">Instagram</span>
+                  )}
+                  @{result.author?.username || (result.platform === 'facebook' ? 'facebook_user' : 'instagram_user')}
+                </div>
                 <a
                   href={result.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="author-link"
                 >
-                  <span>View Original Post</span>
+                  <span>View Original {result.platform === 'facebook' ? 'on Facebook' : 'Post'}</span>
                   <ExternalLink size={11} />
                 </a>
               </div>
             </div>
 
-            <div className="media-badge">
+            <div className={`media-badge ${result.platform === 'facebook' ? 'platform-facebook' : 'platform-instagram'}`}>
               {result.type === 'carousel'
                 ? `Album (${result.media.length})`
-                : result.type}
+                : `${result.platform === 'facebook' ? 'FB ' : ''}${result.type}`}
             </div>
           </div>
 
@@ -827,7 +839,7 @@ export default function Home() {
                 onClick={() =>
                   downloadWithProgress(
                     currentMedia?.url,
-                    currentMedia?.filename || `instagrab_${result.shortcode}_${currentMediaIndex + 1}.${currentMedia?.type === 'video' ? 'mp4' : 'jpg'}`,
+                    currentMedia?.filename || `${result.platform === 'facebook' ? 'facebook' : 'instagrab'}_${result.shortcode || result.id}_${currentMediaIndex + 1}.${currentMedia?.type === 'video' ? 'mp4' : 'jpg'}`,
                     currentMedia?.type === 'video' ? 'Video' : 'Photo'
                   )
                 }
@@ -901,7 +913,7 @@ export default function Home() {
             <div className="step-number">1</div>
             <h3 className="step-header">Copy or Share</h3>
             <p className="step-desc">
-              In Instagram, tap the Share icon on any Reel or Post, then tap <strong>Share</strong> or <strong>Copy link</strong>.
+              In Instagram or Facebook, tap the Share icon on any Reel, Video or Post, then tap <strong>Share</strong> or <strong>Copy link</strong>.
             </p>
           </div>
 
@@ -1028,7 +1040,14 @@ export default function Home() {
                           <div className="history-thumb" />
                         )}
                         <div className="history-meta">
-                          <div className="history-author">@{item.author}</div>
+                          <div className="history-author">
+                            {item.platform === 'facebook' ? (
+                              <span className="platform-pill facebook" style={{ padding: '2px 6px', fontSize: '0.65rem' }}>FB</span>
+                            ) : (
+                              <span className="platform-pill instagram" style={{ padding: '2px 6px', fontSize: '0.65rem' }}>IG</span>
+                            )}
+                            @{item.author}
+                          </div>
                           <div className="history-date">
                             {new Date(item.timestamp).toLocaleDateString()} • {item.type}
                           </div>
@@ -1095,10 +1114,10 @@ export default function Home() {
       {/* Footer */}
       <footer className="footer">
         <p>
-          InstaGrab &copy; {new Date().getFullYear()} &bull; Fast Instagram Media Downloader
+          InstaGrab &copy; {new Date().getFullYear()} &bull; Fast Instagram &amp; Facebook Media Downloader
         </p>
         <p style={{ marginTop: '4px', fontSize: '0.75rem' }}>
-          Not affiliated with Instagram or Meta. For personal archiving only.
+          Not affiliated with Instagram, Facebook, or Meta. For personal archiving only.
         </p>
       </footer>
     </div>

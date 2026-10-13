@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { extractInstagramMedia, parseInstagramUrl } from '@/lib/extractor';
+import { extractMedia, parseSocialUrl } from '@/lib/extractor';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,18 +16,18 @@ export async function POST(request) {
       );
     }
 
-    const parsed = parseInstagramUrl(url);
+    const parsed = parseSocialUrl(url);
     if (!parsed) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Invalid Instagram link. Please paste a link to a post, reel, or video.'
+          error: 'Invalid link. Please paste a link to an Instagram post, reel, or Facebook video, reel, or post.'
         },
         { status: 400 }
       );
     }
 
-    const result = await extractInstagramMedia(url, {
+    const result = await extractMedia(url, {
       sessionId,
       cobaltInstance,
       cobaltApiKey
@@ -42,7 +42,7 @@ export async function POST(request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to extract media from the Instagram link.'
+        error: error.message || 'Failed to extract media from the link.'
       },
       { status: 500 }
     );
@@ -61,7 +61,7 @@ export async function GET(request) {
   }
 
   try {
-    const result = await extractInstagramMedia(url);
+    const result = await extractMedia(url);
     return NextResponse.json({
       success: true,
       data: result
