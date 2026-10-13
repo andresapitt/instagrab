@@ -637,10 +637,12 @@ export default function Home() {
           <div>
             <h4 className="error-title">Couldn&apos;t Grab Media</h4>
             <p className="error-message">{error}</p>
-            <button onClick={() => setShowSettingsModal(true)} className="error-action">
-              <Settings size={14} />
-              <span>Configure Instagram Session in Settings</span>
-            </button>
+            {(inputUrl.includes('instagram.com') || inputUrl.includes('instagr.am')) && (
+              <button onClick={() => setShowSettingsModal(true)} className="error-action">
+                <Settings size={14} />
+                <span>Configure Instagram Session in Settings</span>
+              </button>
+            )}
           </div>
         </div>
       )}
